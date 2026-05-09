@@ -410,7 +410,8 @@ def _load_toml_defaults(rootdir):
             import tomli as tomllib
         except ImportError:
             sys.stderr.write(
-                "pytest-jira: unable to load %s (tomllib unavailable)\n"
+                "pytest-jira: unable to load %s (requires tomli for "
+                "Python < 3.11)\n"
                 % config_path
             )
             return {}
@@ -435,9 +436,7 @@ def _load_default_config(rootdir):
     defaults = HARDCODED_DEFAULT_CONFIG.copy()
     defaults.update(_load_toml_defaults(rootdir))
     return {
-        key: _to_config_value(value)
-        for key, value in defaults.items()
-        if value is not None
+        key: _to_config_value(value) for key, value in defaults.items()
     }
 
 
