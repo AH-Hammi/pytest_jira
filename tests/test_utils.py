@@ -39,6 +39,7 @@ def test_load_default_config_from_toml(tmp_path):
 [default]
 marker_strategy = "strict"
 run_test_case = false
+docs_search = true
 connection_retry_total = 9
 """.strip()
     )
@@ -46,13 +47,16 @@ connection_retry_total = 9
     defaults = _load_default_config(tmp_path)
     assert defaults["marker_strategy"] == "strict"
     assert defaults["run_test_case"] == "false"
+    assert defaults["docs_search"] == "true"
     assert defaults["connection_retry_total"] == "9"
 
 
-def test_load_default_config_from_malformed_toml(tmp_path):
+def test_load_default_config_from_malformed_toml(tmp_path, capsys):
     config_path = tmp_path / "pytest_jira_default.toml"
     config_path.write_text("[default\nmarker_strategy = 'strict'")
 
     defaults = _load_default_config(tmp_path)
+    stderr = capsys.readouterr().err
+    assert "unable to parse" in stderr
     assert defaults["marker_strategy"] == "open"
     assert defaults["run_test_case"] == "true"
