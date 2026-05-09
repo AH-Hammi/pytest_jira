@@ -47,3 +47,12 @@ connection_retry_total = 9
     assert defaults["marker_strategy"] == "strict"
     assert defaults["run_test_case"] == "false"
     assert defaults["connection_retry_total"] == "9"
+
+
+def test_load_default_config_from_malformed_toml(tmp_path):
+    config_file = tmp_path / "pytest_jira_default.toml"
+    config_file.write_text("[default\nmarker_strategy = 'strict'")
+
+    defaults = _load_default_config(tmp_path)
+    assert defaults["marker_strategy"] == "open"
+    assert defaults["run_test_case"] == "true"

@@ -391,12 +391,14 @@ def _get_bool(config, section, name, default=False):
 
 
 def _to_config_value(value):
+    """Convert default values to strings suitable for ConfigParser."""
     if isinstance(value, bool):
         return str(value).lower()
     return str(value)
 
 
 def _load_toml_defaults(rootdir):
+    """Load default options from pytest_jira_default.toml for a root dir."""
     config_path = os.path.join(str(rootdir), DEFAULT_CONFIG_FILE_NAME)
     if not os.path.exists(config_path):
         return {}
@@ -404,10 +406,21 @@ def _load_toml_defaults(rootdir):
     try:
         import tomllib
     except ImportError:
+        sys.stderr.write(
+            "pytest-jira: unable to load %s (tomllib unavailable; use "
+            "Python 3.11+ or install tomli)\n"
+            % config_path
+        )
         return {}
 
-    with open(config_path, "rb") as config_file:
-        toml_data = tomllib.load(config_file)
+    try:
+        with open(config_path, "rb") as config_file:
+            toml_data = tomllib.load(config_file)
+    except Exception as exc:
+        sys.stderr.write(
+            "pytest-jira: unable to parse %s: %s\n" % (config_path, exc)
+        )
+        return {}
 
     default_data = toml_data.get("default", {})
     if not isinstance(default_data, dict):
@@ -416,6 +429,7 @@ def _load_toml_defaults(rootdir):
 
 
 def _load_default_config(rootdir):
+    """Merge hardcoded defaults with file-based defaults for ConfigParser."""
     defaults = HARDCODED_DEFAULT_CONFIG.copy()
     defaults.update(_load_toml_defaults(rootdir))
     return {
