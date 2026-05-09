@@ -1,6 +1,7 @@
 import six
 
 from pytest_jira import _get_value
+from pytest_jira import _load_default_config
 
 
 def init_config_parser():
@@ -22,3 +23,27 @@ def test_get_value2():
 def test_get_value3():
     c = init_config_parser()
     assert _get_value(c, "DEFAULT", "nokey", "one") == "one"
+
+
+def test_load_default_config_without_toml(tmp_path):
+    defaults = _load_default_config(tmp_path)
+    assert defaults["marker_strategy"] == "open"
+    assert defaults["resolved_statuses"] == "closed,resolved"
+    assert defaults["connection_retry_total"] == "5"
+
+
+def test_load_default_config_from_toml(tmp_path):
+    config_file = tmp_path / "pytest_jira_default.toml"
+    config_file.write_text(
+        """
+[default]
+marker_strategy = "strict"
+run_test_case = false
+connection_retry_total = 9
+""".strip()
+    )
+
+    defaults = _load_default_config(tmp_path)
+    assert defaults["marker_strategy"] == "strict"
+    assert defaults["run_test_case"] == "false"
+    assert defaults["connection_retry_total"] == "9"

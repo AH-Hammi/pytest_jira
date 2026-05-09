@@ -164,7 +164,23 @@ Usage
 =====
 
 
-1. Create a ``jira.cfg`` and put it at least in one of following places.
+1. Optional: create ``pytest_jira_default.toml`` in the project root to define
+   plugin default values (added in issue `#172 <https://github.com/rhevm-qe-automation/pytest_jira/issues/172>`__).
+   If this file is missing, pytest-jira falls back to built-in hardcoded defaults.
+
+   .. code:: toml
+
+      [default]
+      ssl_verification = true
+      marker_strategy = "open"
+      docs_search = true
+      resolved_statuses = "closed,resolved"
+      run_test_case = true
+      error_strategy = "strict"
+      connection_retry_total = 5
+      connection_retry_backoff_factor = 0.2
+
+2. Create a ``jira.cfg`` and put it at least in one of following places.
 
    * /etc/jira.cfg
    * ~/jira.cfg
@@ -216,13 +232,13 @@ Usage
 
      py.test --help
 
-2. Mark your tests with jira marker and issue id.
+3. Mark your tests with jira marker and issue id.
 
    ``@pytest.mark.jira('issue_id')``
 
    You can put Jira ID into doc string of test case as well.
 
-3. Run py.test with jira option to enable the plugin.
+4. Run py.test with jira option to enable the plugin.
 
    ``py.test --jira``
 

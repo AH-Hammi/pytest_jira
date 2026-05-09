@@ -1,0 +1,10 @@
+# Default pytest-jira configuration values (issue #172)
+[default]
+ssl_verification = true
+marker_strategy = "open"
+docs_search = true
+resolved_statuses = "closed,resolved"
+run_test_case = true
+error_strategy = "strict"
+connection_retry_total = 5
+connection_retry_backoff_factor = 0.2

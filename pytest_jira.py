@@ -34,6 +34,17 @@ URL_ENV_VAR = "PYTEST_JIRA_URL"
 PASSWORD_ENV_VAR = "PYTEST_JIRA_PASSWORD"
 USERNAME_ENV_VAR = "PYTEST_JIRA_USERNAME"
 TOKEN_ENV_VAR = "PYTEST_JIRA_TOKEN"
+DEFAULT_CONFIG_FILE_NAME = "pytest_jira_default.toml"
+HARDCODED_DEFAULT_CONFIG = {
+    "ssl_verification": True,
+    "marker_strategy": "open",
+    "docs_search": True,
+    "resolved_statuses": ",".join(DEFAULT_RESOLVE_STATUSES),
+    "run_test_case": DEFAULT_RUN_TEST_CASE,
+    "error_strategy": "strict",
+    "connection_retry_total": 5,
+    "connection_retry_backoff_factor": 0.2,
+}
 
 
 class JiraHooks(object):
@@ -379,6 +390,41 @@ def _get_bool(config, section, name, default=False):
     return default
 
 
+def _to_config_value(value):
+    if isinstance(value, bool):
+        return str(value).lower()
+    return str(value)
+
+
+def _load_toml_defaults(rootdir):
+    config_path = os.path.join(str(rootdir), DEFAULT_CONFIG_FILE_NAME)
+    if not os.path.exists(config_path):
+        return {}
+
+    try:
+        import tomllib
+    except ImportError:
+        return {}
+
+    with open(config_path, "rb") as config_file:
+        toml_data = tomllib.load(config_file)
+
+    default_data = toml_data.get("default", {})
+    if not isinstance(default_data, dict):
+        return {}
+    return default_data
+
+
+def _load_default_config(rootdir):
+    defaults = HARDCODED_DEFAULT_CONFIG.copy()
+    defaults.update(_load_toml_defaults(rootdir))
+    return {
+        key: _to_config_value(value)
+        for key, value in defaults.items()
+        if value is not None
+    }
+
+
 def pytest_addoption(parser):
     """
     Add a options section to py.test --help for jira integration.
@@ -397,7 +443,11 @@ def pytest_addoption(parser):
     )
 
     # FIXME - Change to a credentials.yaml ?
+    # Defaults are loaded from pytest_jira_default.toml (issue #172).
     config = six.moves.configparser.ConfigParser()
+    config.read_dict(
+        {"DEFAULT": _load_default_config(parser.extra_info["rootdir"])}
+    )
     config.read(
         [
             os.path.join("/", "etc", "jira.cfg"),
@@ -559,7 +609,7 @@ def pytest_addoption(parser):
         "--jira-return-metadata",
         action="store_true",
         dest="return_jira_metadata",
-        default=_get_value(config, "DEFAULT", "return_jira_metadata"),
+        default=_get_bool(config, "DEFAULT", "return_jira_metadata", False),
         help="If set, will return Jira issue with ticket metadata",
     )
 
