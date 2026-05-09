@@ -1,7 +1,10 @@
 import six
+import pytest
 
+from pytest_jira import Configuration
 from pytest_jira import _get_value
 from pytest_jira import _load_default_config
+from pytest_jira import _load_pyproject_config
 
 
 def init_config_parser():
@@ -67,3 +70,66 @@ def test_load_default_config_from_malformed_toml(tmp_path, capsys):
     assert defaults["ssl_verification"] == "true"
     assert defaults["error_strategy"] == "strict"
     assert defaults["connection_retry_backoff_factor"] == "0.2"
+
+
+def test_load_pyproject_config(tmp_path):
+    pyproject_path = tmp_path / "pyproject.toml"
+    pyproject_path.write_text(
+        """
+[tool.pytest-jira]
+marker_strategy = "warn"
+run_test_case = false
+resolved_statuses = ["resolved", "closed"]
+connection_retry_total = 9
+""".strip()
+    )
+
+    config = _load_pyproject_config(tmp_path)
+    assert config["marker_strategy"] == "warn"
+    assert config["run_test_case"] is False
+    assert config["resolved_statuses"] == ["resolved", "closed"]
+    assert config["connection_retry_total"] == 9
+
+
+def test_load_default_config_from_pyproject(tmp_path):
+    pyproject_path = tmp_path / "pyproject.toml"
+    pyproject_path.write_text(
+        """
+[tool.pytest-jira]
+marker_strategy = "warn"
+run_test_case = false
+resolved_statuses = ["resolved", "closed"]
+""".strip()
+    )
+
+    defaults = _load_default_config(tmp_path)
+    assert defaults["marker_strategy"] == "warn"
+    assert defaults["run_test_case"] == "false"
+    assert defaults["resolved_statuses"] == "resolved,closed"
+    assert defaults["error_strategy"] == "strict"
+
+
+def test_load_default_config_with_invalid_pyproject_setting(tmp_path):
+    pyproject_path = tmp_path / "pyproject.toml"
+    pyproject_path.write_text(
+        """
+[tool.pytest-jira]
+marker_strategy = "invalid"
+""".strip()
+    )
+
+    with pytest.raises(ValueError, match="Invalid pytest-jira configuration"):
+        _load_default_config(tmp_path)
+
+
+def test_configuration_normalizes_hyphenated_keys_and_lists():
+    config = Configuration.validate(
+        {
+            "run-test-case": False,
+            "resolved-statuses": ["closed", "resolved"],
+            "marker-strategy": "WARN",
+        }
+    )
+    assert config["run_test_case"] is False
+    assert config["resolved_statuses"] == "closed,resolved"
+    assert config["marker_strategy"] == "warn"

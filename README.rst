@@ -180,7 +180,18 @@ Usage
       connection_retry_total = 5
       connection_retry_backoff_factor = 0.2
 
-2. Create a ``jira.cfg`` and put it at least in one of following places.
+2. Optional: configure pytest-jira in ``pyproject.toml`` using
+   ``[tool.pytest-jira]``.
+
+   .. code:: toml
+
+      [tool.pytest-jira]
+      marker_strategy = "open"
+      docs_search = true
+      run_test_case = true
+      resolved_statuses = ["closed", "resolved"]
+
+3. Create a ``jira.cfg`` and put it at least in one of following places.
 
    * /etc/jira.cfg
    * ~/jira.cfg
@@ -232,13 +243,13 @@ Usage
 
      py.test --help
 
-3. Mark your tests with jira marker and issue id.
+4. Mark your tests with jira marker and issue id.
 
    ``@pytest.mark.jira('issue_id')``
 
    You can put Jira ID into doc string of test case as well.
 
-4. Run py.test with jira option to enable the plugin.
+5. Run py.test with jira option to enable the plugin.
 
    ``py.test --jira``
 
