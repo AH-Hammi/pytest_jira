@@ -406,12 +406,14 @@ def _load_toml_defaults(rootdir):
     try:
         import tomllib
     except ImportError:
-        sys.stderr.write(
-            "pytest-jira: unable to load %s (tomllib unavailable; use "
-            "Python 3.11+ or install tomli)\n"
-            % config_path
-        )
-        return {}
+        try:
+            import tomli as tomllib
+        except ImportError:
+            sys.stderr.write(
+                "pytest-jira: unable to load %s (tomllib unavailable)\n"
+                % config_path
+            )
+            return {}
 
     try:
         with open(config_path, "rb") as config_file:
