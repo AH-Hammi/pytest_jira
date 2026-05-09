@@ -1,4 +1,5 @@
-# Default pytest-jira configuration values (issue #172)
+# Default pytest-jira configuration values loaded by the plugin
+# (introduced in issue #172: https://github.com/rhevm-qe-automation/pytest_jira/issues/172)
 [default]
 ssl_verification = true
 marker_strategy = "open"

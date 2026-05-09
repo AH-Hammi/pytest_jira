@@ -410,7 +410,7 @@ def _load_toml_defaults(rootdir):
             import tomli as tomllib
         except ImportError:
             sys.stderr.write(
-                "pytest-jira: unable to load %s (requires tomli for "
+                "pytest-jira: unable to load %s (install tomli for "
                 "Python < 3.11)\n"
                 % config_path
             )
