@@ -17,6 +17,7 @@ import pytest
 import requests
 import six
 import urllib3
+from marshmallow import EXCLUDE, Schema, ValidationError, fields, validate
 from packaging.version import Version
 from retry import retry
 
@@ -34,6 +35,89 @@ URL_ENV_VAR = "PYTEST_JIRA_URL"
 PASSWORD_ENV_VAR = "PYTEST_JIRA_PASSWORD"
 USERNAME_ENV_VAR = "PYTEST_JIRA_USERNAME"
 TOKEN_ENV_VAR = "PYTEST_JIRA_TOKEN"
+DEFAULT_CONFIG_FILE_NAME = "pytest_jira_default.toml"
+HARDCODED_DEFAULT_CONFIG = {
+    "ssl_verification": True,
+    "marker_strategy": "open",
+    "docs_search": True,
+    "resolved_statuses": ",".join(DEFAULT_RESOLVE_STATUSES),
+    "run_test_case": DEFAULT_RUN_TEST_CASE,
+    "error_strategy": "strict",
+    "connection_retry_total": 5,
+    "connection_retry_backoff_factor": 0.2,
+}
+
+
+class ConfigurationSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    url = fields.String(allow_none=True, load_default=None)
+    username = fields.String(allow_none=True, load_default=None)
+    password = fields.String(allow_none=True, load_default=None)
+    token = fields.String(allow_none=True, load_default=None)
+    ssl_verification = fields.Boolean(load_default=True)
+    components = fields.String(allow_none=True, load_default="")
+    version = fields.String(allow_none=True, load_default=None)
+    marker_strategy = fields.String(
+        load_default="open",
+        validate=validate.OneOf(["open", "strict", "ignore", "warn"]),
+    )
+    docs_search = fields.Boolean(load_default=True)
+    issue_regex = fields.String(allow_none=True, load_default=None)
+    resolved_statuses = fields.String(
+        allow_none=True,
+        load_default=",".join(DEFAULT_RESOLVE_STATUSES),
+    )
+    resolved_resolutions = fields.String(allow_none=True, load_default=None)
+    run_test_case = fields.Boolean(load_default=DEFAULT_RUN_TEST_CASE)
+    error_strategy = fields.String(
+        load_default="strict",
+        validate=validate.OneOf([STRICT, SKIP, IGNORE]),
+    )
+    connection_retry_total = fields.Integer(load_default=5)
+    connection_retry_backoff_factor = fields.Float(load_default=0.2)
+    return_jira_metadata = fields.Boolean(load_default=False)
+
+
+class Configuration(object):
+    schema = ConfigurationSchema()
+    _LIST_LIKE_FIELDS = {
+        "components",
+        "resolved_statuses",
+        "resolved_resolutions",
+    }
+    _LOWERCASE_FIELDS = {"marker_strategy", "error_strategy"}
+
+    @classmethod
+    def _normalize_input(cls, values):
+        normalized = {}
+        for key, value in values.items():
+            normalized_key = key.replace("-", "_")
+            if (
+                normalized_key in cls._LIST_LIKE_FIELDS
+                and isinstance(value, (list, tuple))
+            ):
+                normalized[normalized_key] = ",".join(
+                    str(item) for item in value
+                )
+            elif (
+                normalized_key in cls._LOWERCASE_FIELDS
+                and isinstance(value, six.string_types)
+            ):
+                normalized[normalized_key] = value.lower()
+            else:
+                normalized[normalized_key] = value
+        return normalized
+
+    @classmethod
+    def validate(cls, values):
+        try:
+            return cls.schema.load(cls._normalize_input(values or {}))
+        except ValidationError as exc:
+            raise ValueError(
+                "Invalid pytest-jira configuration: %s" % exc.messages
+            )
 
 
 class JiraHooks(object):
@@ -379,6 +463,78 @@ def _get_bool(config, section, name, default=False):
     return default
 
 
+def _to_config_value(value):
+    """Convert default values to strings suitable for ConfigParser."""
+    if isinstance(value, bool):
+        return str(value).lower()
+    return str(value)
+
+
+def _load_toml_file(config_path):
+    try:
+        import tomllib
+    except ImportError:
+        try:
+            import tomli as tomllib
+        except ImportError:
+            sys.stderr.write(
+                "pytest-jira: unable to load %s (install tomli for "
+                "Python < 3.11)\n"
+                % config_path
+            )
+            return {}
+    try:
+        with open(config_path, "rb") as config_file:
+            return tomllib.load(config_file)
+    except Exception as exc:
+        sys.stderr.write(
+            "pytest-jira: unable to parse %s: %s\n" % (config_path, exc)
+        )
+        return {}
+
+
+def _load_toml_defaults(rootdir):
+    """Load default options from pytest_jira_default.toml for a root dir."""
+    config_path = os.path.join(str(rootdir), DEFAULT_CONFIG_FILE_NAME)
+    if not os.path.exists(config_path):
+        return {}
+
+    toml_data = _load_toml_file(config_path)
+    default_data = toml_data.get("default", {})
+    if not isinstance(default_data, dict):
+        return {}
+    return default_data
+
+
+def _load_pyproject_config(rootdir):
+    """Load [tool.pytest-jira] settings from pyproject.toml."""
+    config_path = os.path.join(str(rootdir), "pyproject.toml")
+    if not os.path.exists(config_path):
+        return {}
+
+    toml_data = _load_toml_file(config_path)
+    tool_data = toml_data.get("tool", {})
+    if not isinstance(tool_data, dict):
+        return {}
+    pytest_jira_data = tool_data.get("pytest-jira", {})
+    if not isinstance(pytest_jira_data, dict):
+        return {}
+    return pytest_jira_data
+
+
+def _load_default_config(rootdir):
+    """Merge defaults from all config files and validate before execution."""
+    defaults = HARDCODED_DEFAULT_CONFIG.copy()
+    defaults.update(_load_toml_defaults(rootdir))
+    defaults.update(_load_pyproject_config(rootdir))
+    validated_config = Configuration.validate(defaults)
+    return {
+        key: _to_config_value(value)
+        for key, value in validated_config.items()
+        if value is not None
+    }
+
+
 def pytest_addoption(parser):
     """
     Add a options section to py.test --help for jira integration.
@@ -397,7 +553,14 @@ def pytest_addoption(parser):
     )
 
     # FIXME - Change to a credentials.yaml ?
+    # Defaults are loaded from pytest_jira_default.toml and pyproject.toml.
     config = six.moves.configparser.ConfigParser()
+    try:
+        config.read_dict(
+            {"DEFAULT": _load_default_config(parser.extra_info["rootdir"])}
+        )
+    except ValueError as exc:
+        raise pytest.UsageError(str(exc))
     config.read(
         [
             os.path.join("/", "etc", "jira.cfg"),
@@ -559,7 +722,7 @@ def pytest_addoption(parser):
         "--jira-return-metadata",
         action="store_true",
         dest="return_jira_metadata",
-        default=_get_value(config, "DEFAULT", "return_jira_metadata"),
+        default=_get_bool(config, "DEFAULT", "return_jira_metadata", False),
         help="If set, will return Jira issue with ticket metadata",
     )
 
