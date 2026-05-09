@@ -49,6 +49,10 @@ connection_retry_total = 9
     assert defaults["run_test_case"] == "false"
     assert defaults["docs_search"] == "true"
     assert defaults["connection_retry_total"] == "9"
+    assert defaults["ssl_verification"] == "true"
+    assert defaults["error_strategy"] == "strict"
+    assert defaults["resolved_statuses"] == "closed,resolved"
+    assert defaults["connection_retry_backoff_factor"] == "0.2"
 
 
 def test_load_default_config_from_malformed_toml(tmp_path, capsys):
@@ -60,3 +64,6 @@ def test_load_default_config_from_malformed_toml(tmp_path, capsys):
     assert "unable to parse" in stderr
     assert defaults["marker_strategy"] == "open"
     assert defaults["run_test_case"] == "true"
+    assert defaults["ssl_verification"] == "true"
+    assert defaults["error_strategy"] == "strict"
+    assert defaults["connection_retry_backoff_factor"] == "0.2"
